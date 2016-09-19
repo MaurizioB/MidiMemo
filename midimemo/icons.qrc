@@ -1,0 +1,16 @@
+<RCC>
+  <qresource prefix="player">
+    <file>media-pause.svg</file>
+    <file>media-play.svg</file>
+    <file>media-step-backward.svg</file>
+    <file>media-stop.svg</file>
+    <file>media-record.svg</file>
+  </qresource>
+  <qresource prefix="systray">
+    <file>record-saved.svg</file>
+    <file>record-enabled.svg</file>
+    <file>record-active.svg</file>
+    <file>record-disabled.svg</file>
+    <file>record-event.svg</file>
+  </qresource>
+</RCC>
