@@ -10,7 +10,7 @@ from PyQt4 import QtCore, QtGui, uic
 import icons
 from midiutils import *
 from classes import ConnectionEvent, MidiSource, MidiStream, SettingsObj
-import midi
+import midifile as midi
 
 clientname = 'MidiMemo'
 
@@ -775,6 +775,7 @@ class ExportWin(QtGui.QDialog):
         source_bpm = self.src_bpm_spin.value()
 
         for event, time, source, enabled in self.event_buffer:
+            if isinstance(event, ConnectionEvent): continue
             if not enabled and not self.disabled_chk.isChecked: continue
             _, _, dest = source
             if dest not in track_dict.keys(): continue

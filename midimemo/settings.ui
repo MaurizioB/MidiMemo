@@ -252,6 +252,9 @@
           </item>
           <item row="1" column="0" colspan="2">
            <widget class="QCheckBox" name="autosave_chk">
+            <property name="enabled">
+             <bool>false</bool>
+            </property>
             <property name="text">
              <string>Automatically save to MIDI file to the following path:</string>
             </property>
