@@ -972,12 +972,12 @@ class Graph(QtCore.QObject):
 
     def graph_full(self, full_port=False, full_conn=False):
         for client in [self.client_id_dict[i] for i in sorted(self.client_id_dict.keys())]:
-            c_str = '{}\n'.format(client)
+            c_str = '{} ({})\n'.format(client, client.id)
             output = ''
             for port in client.port_dict.values():
                 if port.hidden and not full_port:
                     continue
-                output += '\t{} (type: {}, caps: {})\n'.format(port, port.type, port.caps)
+                output += '\t{} {} (type: {}, caps: {})\n'.format(port.id, port, port.type, port.caps)
                 for conn in port.connections:
                     if conn.hidden and not full_conn:
                         continue
@@ -1033,5 +1033,8 @@ class Graph(QtCore.QObject):
             name_dict[client.name] = name_l
         return name_dict
 
-
+if __name__ == '__main__':
+    seq = alsaseq.Sequencer(clientname='lister')
+    g = Graph(seq)
+    g.graph_full(True, True)
 
