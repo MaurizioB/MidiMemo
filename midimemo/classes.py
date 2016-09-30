@@ -104,8 +104,8 @@ class MidiStream(QtCore.QObject):
         if end:
             self.start = self.end.addSecs(-self.data[-1].time*10**-9)
 
-    def append(self, event, time, source=None):
-        self.data.append(MidiData(event, time, source, enabled=False))
+    def append(self, event, time, source=None, enabled=True):
+        self.data.append(MidiData(event, time, source, enabled=enabled))
 
     def close(self, last_event_limit):
         now = QtCore.QDateTime.currentDateTime()

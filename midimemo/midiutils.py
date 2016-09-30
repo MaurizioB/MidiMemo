@@ -61,7 +61,7 @@ Controllers = {
                 61: 'LSB for Controller 29',
                 62: 'LSB for Controller 30',
                 63: 'LSB for Controller 31',
-                64: 'Damper Pedal (Sustain) [Data Byte of 0-63=0ff, 64-127=On]',
+                64: 'Damper Pedal (Sustain)',
                 65: 'Portamento',
                 66: 'Sostenuto',
                 67: 'Soft Pedal',

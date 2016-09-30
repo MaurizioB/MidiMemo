@@ -19,6 +19,7 @@ defaults = {
             'minimum_time': 2, 
             'last_event_limit': 5, 
             'tick_res': 960, 
+            'stop_events': [(123, 0), (64, 0)]
             }
 
 ev_dict = {
@@ -135,14 +136,14 @@ class AlsaMidi(QtCore.QObject):
         print 'stopped'
         self.stopped.emit()
 
-    def output_event(self, event, source=None, dest=None):
-        if source is None:
-            event.source = self.id, self.output.id
-        if dest is None:
-            event.dest = 0xfe, 0xfd
-        print 'sending event {} (src: {}, dest: {})'.format(event, event.source, event.dest)
-        self.seq.output_event(event)
-        self.seq.drain_output()
+#    def output_event(self, event, source=None, dest=None):
+#        if source is None:
+#            event.source = self.id, self.output.id
+#        if dest is None:
+#            event.dest = 0xfe, 0xfd
+#        print 'sending event {} (src: {}, dest: {})'.format(event, event.source, event.dest)
+#        self.seq.output_event(event)
+#        self.seq.drain_output()
 
 
 class PlayerTimer(QtCore.QObject):
@@ -318,6 +319,30 @@ class SourceFilterDialog(QtGui.QDialog):
 
 
 class SettingsDialog(QtGui.QDialog):
+    class StopDelegate(QtGui.QStyledItemDelegate):
+        def __init__(self, parent=None, format=None):
+            QtGui.QStyledItemDelegate.__init__(self, parent)
+            self.index = None
+            self.closeEditor.connect(self.set_data)
+
+        def createEditor(self, parent, option, index):
+            self.index = index
+            if index.column() == 0:
+                combo = QtGui.QComboBox(parent)
+                combo.addItems(['{} - {}'.format(id, Controllers[id]) for id in sorted(Controllers.keys())[1:]])
+                combo.setCurrentIndex(index.data(UserRole).toPyObject()-1)
+                return combo
+            spin = QtGui.QSpinBox(parent)
+            spin.setMaximum(127)
+            return spin
+
+        def set_data(self, widget, hint):
+            model = self.index.model()
+            if self.index.column() == 0:
+                model.itemFromIndex(self.index).setData(widget.currentIndex()+1, UserRole)
+            else:
+                model.itemFromIndex(self.index).setData(widget.value(), UserRole)
+
     class FilterDelegate(QtGui.QStyledItemDelegate):
         def __init__(self, parent=None, format=None):
             QtGui.QStyledItemDelegate.__init__(self, parent)
@@ -338,21 +363,41 @@ class SettingsDialog(QtGui.QDialog):
         _load_ui(self, 'settings.ui')
         self.main = main
         self.settings = self.main.settings
+
         #load filter settings will go here
         self.event_type_filter = self.settings.gFilters.get_event_type(set(), False)
         self.client_id_filter = self.settings.gFilters.get_client_id(set(), False)
         self.port_id_filter = self.settings.gFilters.get_port_id(set(), False)
         self.port_name_filter = self.settings.gFilters.get_port_name(set(), False)
 
+        self.stop_events = self.main.stop_events
+        self.stop_events_model = QtGui.QStandardItemModel()
+        self.stop_events_list.setModel(self.stop_events_model)
+        self.stop_events_list.setItemDelegate(self.StopDelegate(self))
+        self.stop_events_model.setHorizontalHeaderLabels(['CTRL parameter', 'Value'])
+        for param, value in self.stop_events:
+            param_item = QtGui.QStandardItem('{} - {}'.format(param, Controllers[param]))
+            param_item.setData(param, UserRole)
+            value_item = QtGui.QStandardItem(str(value))
+            value_item.setData(QtCore.Qt.AlignHCenter, QtCore.Qt.TextAlignmentRole)
+            self.stop_events_model.appendRow([param_item, value_item])
+        self.stop_events_list.resizeRowsToContents()
+        self.stop_events_list.horizontalHeader().setResizeMode(0, QtGui.QHeaderView.Stretch)
+        self.stop_events_list.resizeColumnToContents(1)
+        self.stop_events_list.selectionChanged = self.stop_events_select
+        self.stop_events_add_btn.clicked.connect(self.stop_events_add)
+        self.stop_events_del_btn.clicked.connect(self.stop_events_del)
+
         self.max_rec_spin.setValue(self.settings.gGeneral.max_rec)
         self.minimum_time_spin.setValue(self.settings.gGeneral.minimum_time)
         self.last_event_limit_spin.setValue(self.settings.gGeneral.last_event_limit)
-        self.tick_res_spin.setValue(self.settings.gGeneral.tick_res)
         self.autosave_chk.setChecked(self.settings.gGeneral.autosave)
         self.autosave_path_edit.setText(self.settings.gGeneral.get_autosave_path(''))
+        self.tick_res_spin.setValue(self.settings.gGeneral.tick_res)
 
         self.autosave_chk.toggled.connect(self.autosave_set)
         self.autosave_path_btn.clicked.connect(self.autosave_path)
+
         self.allnotes_chk.clicked.connect(self.allnotes_click)
         self.noteon_chk.toggled.connect(self.note_toggled)
         self.noteon_chk.toggled.connect(lambda state: self.filter_event_set(NOTEON, state))
@@ -371,6 +416,27 @@ class SettingsDialog(QtGui.QDialog):
         self.buttonBox.button(QtGui.QDialogButtonBox.Apply).clicked.connect(self.check_changes)
         self.accepted.connect(self.check_changes)
 
+    def showEvent(self, event):
+        self.stop_events_list.resizeRowsToContents()
+
+    def stop_events_select(self, selection, prev):
+        if not selection.indexes():
+            self.stop_events_del_btn.setEnabled(False)
+            return
+        self.stop_events_del_btn.setEnabled(True)
+
+    def stop_events_add(self):
+        param_item = QtGui.QStandardItem('{} - {}'.format(1, Controllers[1]))
+        param_item.setData(1, UserRole)
+        value_item = QtGui.QStandardItem('0')
+        value_item.setData(0, UserRole)
+        value_item.setData(QtCore.Qt.AlignHCenter, QtCore.Qt.TextAlignmentRole)
+        self.stop_events_model.appendRow([param_item, value_item])
+        self.stop_events_list.resizeRowsToContents()
+
+    def stop_events_del(self):
+        index = self.stop_events_list.currentIndex()
+        self.stop_events_model.takeRow(index.row())
 
     def build_models(self):
         self.client_id_model = QtGui.QStandardItemModel()
@@ -414,6 +480,20 @@ class SettingsDialog(QtGui.QDialog):
         self.minimum_time_spin.setValue(defaults['minimum_time'])
         self.last_event_limit_spin.setValue(defaults['last_event_limit'])
         self.tick_res_spin.setValue(defaults['tick_res'])
+
+        for row in range(self.stop_events_model.rowCount()-1, -1, -1):
+            self.stop_events_model.takeRow(row)
+        for param, value in defaults['stop_events']:
+            param_item = QtGui.QStandardItem('{} - {}'.format(param, Controllers[param]))
+            param_item.setData(param, UserRole)
+            value_item = QtGui.QStandardItem(str(value))
+            value_item.setData(value, UserRole)
+            value_item.setData(QtCore.Qt.AlignHCenter, QtCore.Qt.TextAlignmentRole)
+            self.stop_events_model.appendRow([param_item, value_item])
+        self.stop_events_list.horizontalHeader().setResizeMode(0, QtGui.QHeaderView.Stretch)
+        self.stop_events_list.resizeColumnToContents(1)
+        self.stop_events_list.resizeRowsToContents()
+
         for btn in self.event_btn_group.buttons():
             btn.setChecked(False)
         for row in range(self.client_id_model.rowCount()):
@@ -468,6 +548,13 @@ class SettingsDialog(QtGui.QDialog):
             self.event_type_filter.discard(event_type)
 
     def check_changes(self):
+        def stop_events():
+            events = []
+            for row in range(self.stop_events_model.rowCount()):
+                param = self.stop_events_model.item(row, 0).data(UserRole).toPyObject()
+                value = self.stop_events_model.item(row, 1).data(UserRole).toPyObject()
+                events.append((param, value))
+            return events
         settings = {
                     'gGeneral': {
                                  'minimum_time': self.minimum_time_spin.value, 
@@ -476,6 +563,7 @@ class SettingsDialog(QtGui.QDialog):
                                  'max_rec': self.max_rec_spin.value, 
                                  'autosave': self.autosave_chk.isChecked, 
                                  'autosave_path': lambda: str(self.autosave_path_edit.text()) if self.autosave_path_edit.text() else None, 
+                                 'stop_events': stop_events
                                  }, 
                     'gFilters': {
                                  'event_type': lambda: self.event_type_filter if self.event_type_filter else None, 
@@ -1300,7 +1388,7 @@ class MidiInspector(QtGui.QMainWindow):
         event = event.get_event()
         event.source = self.main.alsa.output.addr
         event.dest = 0xfe, 0xfd
-        print 'sending event {} (src: {}, dest: {})'.format(event, event.source, event.dest)
+        print 'sending event {} (src: {}, dest: {})'.format(event.type, event.source, event.dest)
         self.seq.output_event(event)
         self.seq.drain_output()
 
@@ -1346,7 +1434,9 @@ class MidiInspector(QtGui.QMainWindow):
 
     def notes_off(self):
         for ch in self.column_data[COL_CHAN]:
-            self.output_event(CtrlEvent(0, int(ch), 123, 0))
+#            self.output_event(CtrlEvent(0, int(ch), 123, 0))
+            for param, value in self.main.stop_events:
+                self.output_event(CtrlEvent(0, int(ch), param, value))
 
     def restart(self):
         self.event_table.selectRow(0)
@@ -1472,7 +1562,7 @@ class MidiInspector(QtGui.QMainWindow):
             toggle.triggered.connect(lambda state, s=selection: self.event_enable(s, not enabled))
         if item is not None:
             start = QtGui.QAction('Play from here', self)
-            start.triggered.connect(lambda state, index=item.index():self.set_start(item.row(), True))
+            start.triggered.connect(lambda state:self.set_start(item.row(), True))
             menu.addAction(start)
 #            sep = QtGui.QAction(self)
 #            sep.setSeparator(True)
@@ -1574,14 +1664,16 @@ class MidiInspector(QtGui.QMainWindow):
         menu.exec_(self.sender().mapToGlobal(pos))
 
     def side_header_menu(self, pos):
-        conn_events = [index for index, data in enumerate(self.event_buffer) if isinstance(data.event, ConnectionEvent)]
-        if not conn_events: return
-        row = self.verticalHeader.logicalIndexAt(pos)
         menu = QtGui.QMenu()
-        hidden = any([self.event_table.isRowHidden(row) for row in conn_events])
-        show_connections = QtGui.QAction('{} connection events'.format('Show' if hidden else 'Hide'), self)
-        show_connections.triggered.connect(lambda state: [self.event_table.setRowHidden(row, not hidden) for row in conn_events])
-        menu.addAction(show_connections)
+        start = QtGui.QAction('Play from here', self)
+        start.triggered.connect(lambda state: self.set_start(self.verticalHeader.logicalIndexAt(pos), True))
+        menu.addAction(start)
+        conn_events = [index for index, data in enumerate(self.event_buffer) if isinstance(data.event, ConnectionEvent)]
+        if conn_events:
+            hidden = any([self.event_table.isRowHidden(r) for r in conn_events])
+            show_connections = QtGui.QAction('{} connection events'.format('Show' if hidden else 'Hide'), self)
+            show_connections.triggered.connect(lambda state: [self.event_table.setRowHidden(r, not hidden) for r in conn_events])
+            menu.addAction(show_connections)
         menu.exec_(self.sender().mapToGlobal(pos))
         
 
@@ -1674,12 +1766,16 @@ class MidiMonitor(QtCore.QObject):
         self.last_event_limit = self.settings.gGeneral.get_last_event_limit(defaults['last_event_limit'], True)
         self.tick_res = self.settings.gGeneral.get_tick_res(defaults['tick_res'], True)
         self.max_rec = self.settings.gGeneral.get_max_rec(defaults['max_rec'], True)
-        self.settings.gGeneral.changed_max_rec.connect(self.rec_check)
+        self.settings.gGeneral.changed_max_rec.connect(self.max_rec_check)
 
         self.autosave = self.settings.gGeneral.get_autosave(False, True)
         self.autosave_path = self.settings.gGeneral.get_autosave_path(None)
         self.settings.gGeneral.changed_autosave.connect(lambda state: setattr(self, 'autosave', state))
         self.settings.gGeneral.changed_autosave_path.connect(lambda path: setattr(self, 'autosave_path', path))
+
+        self.stop_events = self.settings.gGeneral.get_stop_events(defaults['stop_events'], False)
+        self.settings.gGeneral.changed_stop_events.connect(lambda events: setattr(self, 'stop_events', events))
+        print self.stop_events
 
         self.event_type_filter = self.settings.gFilters.get_event_type(set(), False)
         self.client_id_filter = self.settings.gFilters.get_client_id(set(), False)
@@ -1734,7 +1830,7 @@ class MidiMonitor(QtCore.QObject):
     def compile_port_filter_regex(self, name_list):
         return re.compile('^{}$'.format('$|^'.join([name for name in name_list])))
 
-    def rec_check(self, value):
+    def max_rec_check(self, value):
         self.max_rec = value
         while len(self.rec_list) > self.max_rec:
             self.rec_delete(0)
@@ -1887,14 +1983,14 @@ class MidiMonitor(QtCore.QObject):
         self.icon_timer_saved.stop()
 
     def alsa_conn_event(self, conn, state):
-        print 'connection {}: src({}:{})'.format('created' if state else 'lost', conn.dest.client.name, conn.dest.name)
+#        print 'connection {}: src({}:{})'.format('created' if state else 'lost', conn.dest.client.name, conn.dest.name)
         if not (self.enabled and self.event_buffer): return
         time = self.timer.nsecsElapsed()
         source_tuple = (conn.src.client.name, conn.src.name, conn.src.addr)
         source = MidiSource(*source_tuple)
         dest_tuple = (conn.dest.client.name, conn.dest.name, conn.dest.addr)
         event = ConnectionEvent(source_tuple, dest_tuple, state)
-        self.event_buffer.append(event, time, source)
+        self.event_buffer.append(event, time, source, enabled=False)
         self.last_event_timer.start()
         self.icon_set(EVENT)
         self.icon_timer.start()
