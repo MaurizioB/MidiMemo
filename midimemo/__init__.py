@@ -370,7 +370,7 @@ class SettingsDialog(QtGui.QDialog):
         self.port_id_filter = self.settings.gFilters.get_port_id(set(), False)
         self.port_name_filter = self.settings.gFilters.get_port_name(set(), False)
 
-        self.stop_events = self.main.stop_events
+        self.stop_events = self.settings.gGeneral.get_stop_events(defaults['stop_events'], False)
         self.stop_events_model = QtGui.QStandardItemModel()
         self.stop_events_list.setModel(self.stop_events_model)
         self.stop_events_list.setItemDelegate(self.StopDelegate(self))
@@ -379,6 +379,7 @@ class SettingsDialog(QtGui.QDialog):
             param_item = QtGui.QStandardItem('{} - {}'.format(param, Controllers[param]))
             param_item.setData(param, UserRole)
             value_item = QtGui.QStandardItem(str(value))
+            value_item.setData(value, UserRole)
             value_item.setData(QtCore.Qt.AlignHCenter, QtCore.Qt.TextAlignmentRole)
             self.stop_events_model.appendRow([param_item, value_item])
         self.stop_events_list.resizeRowsToContents()
@@ -554,6 +555,7 @@ class SettingsDialog(QtGui.QDialog):
                 param = self.stop_events_model.item(row, 0).data(UserRole).toPyObject()
                 value = self.stop_events_model.item(row, 1).data(UserRole).toPyObject()
                 events.append((param, value))
+            print events
             return events
         settings = {
                     'gGeneral': {
@@ -1775,7 +1777,6 @@ class MidiMonitor(QtCore.QObject):
 
         self.stop_events = self.settings.gGeneral.get_stop_events(defaults['stop_events'], False)
         self.settings.gGeneral.changed_stop_events.connect(lambda events: setattr(self, 'stop_events', events))
-        print self.stop_events
 
         self.event_type_filter = self.settings.gFilters.get_event_type(set(), False)
         self.client_id_filter = self.settings.gFilters.get_client_id(set(), False)
@@ -1951,7 +1952,10 @@ class MidiMonitor(QtCore.QObject):
             if client_id == 0: continue
             for port_id, port in port_dict.items():
                 if port.is_output and port != self.alsa.output and not alsaseq.SEQ_PORT_CAP_NO_EXPORT in port.caps:
-                    self.seq.connect_ports(port.addr, self.input.addr)
+                    try:
+                        self.seq.connect_ports(port.addr, self.input.addr)
+                    except:
+                        print 'Error trying to connect to {}:{} ({})'.format(port.client.name, port.name, port.addr)
 
     def new_alsa_port(self, port):
         if not port.is_output or alsaseq.SEQ_PORT_CAP_NO_EXPORT in port.caps: return
